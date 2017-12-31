@@ -1,7 +1,7 @@
-use std::cmp::Ordering::{self, Greater, Less, Equal};
+use std::cmp::Ordering::{self, Equal, Greater, Less};
 use std::collections::hash_map::Entry::{Occupied, Vacant};
-use std::collections::{HashMap};
-use std::fmt::{Debug, Formatter, Error};
+use std::collections::HashMap;
+use std::fmt::{Debug, Error, Formatter};
 use std::hash::Hash;
 
 #[cfg(any(quickcheck, test))]
@@ -11,7 +11,10 @@ use Crdt;
 
 /// A two-phase set.
 #[derive(Clone, Default, Eq, PartialEq)]
-pub struct TpSet<T> where T: Eq + Hash {
+pub struct TpSet<T>
+where
+    T: Eq + Hash,
+{
     elements: HashMap<T, bool>,
 }
 
@@ -22,8 +25,10 @@ pub enum TpSetOp<T> {
     Remove(T),
 }
 
-impl <T> TpSet<T> where T: Clone + Eq + Hash {
-
+impl<T> TpSet<T>
+where
+    T: Clone + Eq + Hash,
+{
     /// Create a new two-phase set.
     ///
     /// ### Example
@@ -35,7 +40,9 @@ impl <T> TpSet<T> where T: Clone + Eq + Hash {
     /// assert!(set.is_empty());
     /// ```
     pub fn new() -> TpSet<T> {
-        TpSet { elements: HashMap::new() }
+        TpSet {
+            elements: HashMap::new(),
+        }
     }
 
     /// Insert an element into a two-phase set.
@@ -76,18 +83,21 @@ impl <T> TpSet<T> where T: Clone + Eq + Hash {
             Vacant(entry) => {
                 entry.insert(false);
                 Some(TpSetOp::Remove(element))
-            },
+            }
             Occupied(ref mut entry) if *entry.get() => {
                 entry.insert(false);
                 Some(TpSetOp::Remove(element))
-            },
+            }
             Occupied(_) => None,
         }
     }
 
     /// Returns the number of elements in the set.
     pub fn len(&self) -> usize {
-        self.elements.iter().filter(|&(_, &is_present)| is_present).count()
+        self.elements
+            .iter()
+            .filter(|&(_, &is_present)| is_present)
+            .count()
     }
 
     /// Returns true if the set contains the value.
@@ -96,25 +106,33 @@ impl <T> TpSet<T> where T: Clone + Eq + Hash {
     }
 
     /// Returns true if the set contains no elements.
-    pub fn is_empty(&self) -> bool{ self.len() == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     pub fn is_subset(&self, other: &TpSet<T>) -> bool {
         for (element, &is_present) in self.elements.iter() {
-            if is_present && !other.contains(element) { return false; }
+            if is_present && !other.contains(element) {
+                return false;
+            }
         }
         true
     }
 
     pub fn is_disjoint(&self, other: &TpSet<T>) -> bool {
         for (element, &is_present) in self.elements.iter() {
-            if is_present && other.contains(element) { return false; }
+            if is_present && other.contains(element) {
+                return false;
+            }
         }
         true
     }
 }
 
-impl <T> Crdt for TpSet<T> where T: Clone + Eq + Hash {
-
+impl<T> Crdt for TpSet<T>
+where
+    T: Clone + Eq + Hash,
+{
     type Operation = TpSetOp<T>;
 
     /// Merge a replica into the set.
@@ -146,7 +164,9 @@ impl <T> Crdt for TpSet<T> where T: Clone + Eq + Hash {
             if is_present {
                 match self.elements.entry(element) {
                     Occupied(_) => (),
-                    Vacant(entry) => { entry.insert(is_present); },
+                    Vacant(entry) => {
+                        entry.insert(is_present);
+                    }
                 }
             } else {
                 self.elements.insert(element, is_present);
@@ -173,13 +193,17 @@ impl <T> Crdt for TpSet<T> where T: Clone + Eq + Hash {
     /// ```
     fn apply(&mut self, operation: TpSetOp<T>) {
         match operation {
-            TpSetOp::Insert(element) => { self.insert(element); },
-            TpSetOp::Remove(element) => { self.remove(element); }
+            TpSetOp::Insert(element) => {
+                self.insert(element);
+            }
+            TpSetOp::Remove(element) => {
+                self.remove(element);
+            }
         }
     }
 }
 
-impl <T : Eq + Hash> PartialOrd for TpSet<T> {
+impl<T: Eq + Hash> PartialOrd for TpSet<T> {
     fn partial_cmp(&self, other: &TpSet<T>) -> Option<Ordering> {
         if self.elements == other.elements {
             return Some(Equal);
@@ -228,42 +252,63 @@ impl <T : Eq + Hash> PartialOrd for TpSet<T> {
     }
 }
 
-impl <T> Debug for TpSet<T> where T: Debug + Eq + Hash {
-     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-         try!(write!(f, "{{present: {{"));
-         for (i, x) in self.elements
-                           .iter()
-                           .filter(|&(_, &is_present)| is_present)
-                           .map(|(e, _)| e)
-                           .enumerate() {
-             if i != 0 { try!(write!(f, ", ")); }
-             try!(write!(f, "{:?}", *x))
-         }
-         try!(write!(f, "}}, removed: {{"));
-         for (i, x) in self.elements
-                           .iter()
-                           .filter(|&(_, &is_present)| !is_present)
-                           .map(|(e, _)| e)
-                           .enumerate() {
-             if i != 0 { try!(write!(f, ", ")); }
-             try!(write!(f, "{:?}", *x))
-         }
-         write!(f, "}}}}")
-     }
+impl<T> Debug for TpSet<T>
+where
+    T: Debug + Eq + Hash,
+{
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        try!(write!(f, "{{present: {{"));
+        for (i, x) in self.elements
+            .iter()
+            .filter(|&(_, &is_present)| is_present)
+            .map(|(e, _)| e)
+            .enumerate()
+        {
+            if i != 0 {
+                try!(write!(f, ", "));
+            }
+            try!(write!(f, "{:?}", *x))
+        }
+        try!(write!(f, "}}, removed: {{"));
+        for (i, x) in self.elements
+            .iter()
+            .filter(|&(_, &is_present)| !is_present)
+            .map(|(e, _)| e)
+            .enumerate()
+        {
+            if i != 0 {
+                try!(write!(f, ", "));
+            }
+            try!(write!(f, "{:?}", *x))
+        }
+        write!(f, "}}}}")
+    }
 }
 
 #[cfg(any(quickcheck, test))]
-impl <T> Arbitrary for TpSet<T> where T: Arbitrary + Clone + Eq + Hash {
+impl<T> Arbitrary for TpSet<T>
+where
+    T: Arbitrary + Clone + Eq + Hash,
+{
     fn arbitrary<G: Gen>(g: &mut G) -> TpSet<T> {
-        TpSet { elements: Arbitrary::arbitrary(g) }
+        TpSet {
+            elements: Arbitrary::arbitrary(g),
+        }
     }
-    fn shrink(&self) -> Box<Iterator<Item=TpSet<T>> + 'static> {
-        Box::new(self.elements.shrink().map(|elements| TpSet { elements: elements }))
+    fn shrink(&self) -> Box<Iterator<Item = TpSet<T>> + 'static> {
+        Box::new(
+            self.elements
+                .shrink()
+                .map(|elements| TpSet { elements: elements }),
+        )
     }
 }
 
 #[cfg(any(quickcheck, test))]
-impl <T> Arbitrary for TpSetOp<T> where T: Arbitrary {
+impl<T> Arbitrary for TpSetOp<T>
+where
+    T: Arbitrary,
+{
     fn arbitrary<G: Gen>(g: &mut G) -> TpSetOp<T> {
         if Arbitrary::arbitrary(g) {
             TpSetOp::Insert(Arbitrary::arbitrary(g))
@@ -271,14 +316,10 @@ impl <T> Arbitrary for TpSetOp<T> where T: Arbitrary {
             TpSetOp::Insert(Arbitrary::arbitrary(g))
         }
     }
-    fn shrink(&self) -> Box<Iterator<Item=TpSetOp<T>> + 'static> {
+    fn shrink(&self) -> Box<Iterator<Item = TpSetOp<T>> + 'static> {
         match *self {
-            TpSetOp::Insert(ref element) => {
-                Box::new(element.shrink().map(|e| TpSetOp::Insert(e)))
-            }
-            TpSetOp::Remove(ref element) => {
-                Box::new(element.shrink().map(|e| TpSetOp::Remove(e)))
-            }
+            TpSetOp::Insert(ref element) => Box::new(element.shrink().map(|e| TpSetOp::Insert(e))),
+            TpSetOp::Remove(ref element) => Box::new(element.shrink().map(|e| TpSetOp::Remove(e))),
         }
     }
 }
@@ -314,25 +355,31 @@ mod test {
         quickcheck(test::ordering_equality::<C> as fn(C, C) -> bool);
     }
 
-    #[quickcheck]
-    fn check_local_insert(elements: Vec<u8>) -> bool {
-        let mut set = TpSet::new();
-        for element in elements.clone().into_iter() {
-            set.insert(element);
-        }
+    #[test]
+    fn test_local_insert() {
+        fn check_local_insert(elements: Vec<u8>) -> bool {
+            let mut set = TpSet::new();
+            for element in elements.clone().into_iter() {
+                set.insert(element);
+            }
 
-        elements.iter().all(|element| set.contains(element))
+            elements.iter().all(|element| set.contains(element))
+        }
+        quickcheck(check_local_insert as fn(Vec<u8>) -> bool);
     }
 
-    #[quickcheck]
-    fn check_ordering_lt(mut a: TpSet<u8>, b: TpSet<u8>) -> bool {
-        a.merge(b.clone());
-        let mut i = 0;
-        let mut success = None;
-        while success.is_none() {
-            success = a.insert(i);
-            i += 1;
+    #[test]
+    fn test_ordering_lt() {
+        fn check_ordering_lt(mut a: TpSet<u8>, b: TpSet<u8>) -> bool {
+            a.merge(b.clone());
+            let mut i = 0;
+            let mut success = None;
+            while success.is_none() {
+                success = a.insert(i);
+                i += 1;
+            }
+            a > b && b < a
         }
-        a > b && b < a
+        quickcheck(check_ordering_lt as fn(TpSet<u8>, TpSet<u8>) -> bool);
     }
 }

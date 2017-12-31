@@ -13,8 +13,10 @@ pub struct LwwRegister<T> {
     transaction_id: TransactionId,
 }
 
-impl <T> LwwRegister<T> where T: Clone {
-
+impl<T> LwwRegister<T>
+where
+    T: Clone,
+{
     /// Create a new last-writer-wins register with the provided initial value
     /// and transaction ID.
     ///
@@ -27,8 +29,13 @@ impl <T> LwwRegister<T> where T: Clone {
     /// let mut register = LwwRegister::new("my-value", TransactionId::from(0));
     /// ```
     pub fn new<I>(value: T, transaction_id: I) -> LwwRegister<T>
-    where I: Into<TransactionId> {
-        LwwRegister { value: value, transaction_id: transaction_id.into() }
+    where
+        I: Into<TransactionId>,
+    {
+        LwwRegister {
+            value: value,
+            transaction_id: transaction_id.into(),
+        }
     }
 
     /// Get the current value in the register.
@@ -58,13 +65,17 @@ impl <T> LwwRegister<T> where T: Clone {
     /// assert_eq!(TransactionId::from(0), register.transaction_id());
     /// ```
     pub fn set<I>(&mut self, value: T, transaction_id: I) -> Option<LwwRegister<T>>
-    where I: Into<TransactionId> {
+    where
+        I: Into<TransactionId>,
+    {
         let tid: TransactionId = transaction_id.into();
         if self.transaction_id <= tid {
             self.value = value;
             self.transaction_id = tid;
             Some(self.clone())
-        } else { None }
+        } else {
+            None
+        }
     }
 
     /// Get the transaction ID associated with the current value in the
@@ -91,8 +102,10 @@ impl<T> Deref for LwwRegister<T> {
     }
 }
 
-impl <T> Crdt for LwwRegister<T> where T: Clone {
-
+impl<T> Crdt for LwwRegister<T>
+where
+    T: Clone,
+{
     type Operation = LwwRegister<T>;
 
     /// Merge a replica into this register.
@@ -142,34 +155,45 @@ impl <T> Crdt for LwwRegister<T> where T: Clone {
     }
 }
 
-impl <T> PartialEq for LwwRegister<T> {
+impl<T> PartialEq for LwwRegister<T> {
     fn eq(&self, other: &LwwRegister<T>) -> bool {
         self.transaction_id == other.transaction_id
     }
 }
 
-impl <T> Eq for LwwRegister<T> {}
+impl<T> Eq for LwwRegister<T> {}
 
-impl <T> PartialOrd for LwwRegister<T> {
+impl<T> PartialOrd for LwwRegister<T> {
     fn partial_cmp(&self, other: &LwwRegister<T>) -> Option<Ordering> {
         Some(self.transaction_id.cmp(&other.transaction_id))
     }
 }
 
-impl <T> Ord for LwwRegister<T> {
+impl<T> Ord for LwwRegister<T> {
     fn cmp(&self, other: &LwwRegister<T>) -> Ordering {
         self.transaction_id.cmp(&other.transaction_id)
     }
 }
 
 #[cfg(any(quickcheck, test))]
-impl <T> Arbitrary for LwwRegister<T> where T: Arbitrary {
+impl<T> Arbitrary for LwwRegister<T>
+where
+    T: Arbitrary,
+{
     fn arbitrary<G: Gen>(g: &mut G) -> LwwRegister<T> {
-        LwwRegister { value: Arbitrary::arbitrary(g), transaction_id: Arbitrary::arbitrary(g) }
+        LwwRegister {
+            value: Arbitrary::arbitrary(g),
+            transaction_id: Arbitrary::arbitrary(g),
+        }
     }
-    fn shrink(&self) -> Box<Iterator<Item=LwwRegister<T>> + 'static> {
+    fn shrink(&self) -> Box<Iterator<Item = LwwRegister<T>> + 'static> {
         let tuple = (self.value.clone(), self.transaction_id);
-        Box::new(tuple.shrink().map(|(value, tid)| LwwRegister { value: value, transaction_id: tid }))
+        Box::new(tuple.shrink().map(|(value, tid)| {
+            LwwRegister {
+                value: value,
+                transaction_id: tid,
+            }
+        }))
     }
 }
 
@@ -204,20 +228,26 @@ mod test {
         quickcheck(test::ordering_equality::<C> as fn(C, C) -> bool);
     }
 
-    #[quickcheck]
-    fn check_local_increment(versions: Vec<String>) -> bool {
-        let mut register = LwwRegister::new("".to_string(), 0);
-        for (transaction_id, value) in versions.iter().enumerate() {
-            register.set(value.clone(), transaction_id as u64);
+    #[test]
+    fn test_local_increment() {
+        fn check_local_increment(versions: Vec<String>) -> bool {
+            let mut register = LwwRegister::new("".to_string(), 0);
+            for (transaction_id, value) in versions.iter().enumerate() {
+                register.set(value.clone(), transaction_id as u64);
+            }
+            &*register == versions.last().unwrap_or(&"".to_string())
         }
-        &*register == versions.last().unwrap_or(&"".to_string())
+        quickcheck(check_local_increment as fn(Vec<String>) -> bool);
     }
 
-    #[quickcheck]
-    fn check_ordering_lt(mut a: LwwRegister<String>, b: LwwRegister<String>) -> bool {
-        a.merge(b.clone());
-        let current_tid = a.transaction_id();
-        a.set("foo".to_string(), current_tid.id() + 1);
-        a > b && b < a
+    #[test]
+    fn test_ordering_lt() {
+        fn check_ordering_lt(mut a: LwwRegister<String>, b: LwwRegister<String>) -> bool {
+            a.merge(b.clone());
+            let current_tid = a.transaction_id();
+            a.set("foo".to_string(), current_tid.id() + 1);
+            a > b && b < a
+        }
+        quickcheck(check_ordering_lt as fn(LwwRegister<String>, LwwRegister<String>) -> bool);
     }
 }

@@ -1,5 +1,5 @@
 use std::cmp;
-use std::cmp::Ordering::{self, Greater, Less, Equal};
+use std::cmp::Ordering::{self, Equal, Greater, Less};
 use std::collections::HashMap;
 
 use {Crdt, ReplicaId};
@@ -13,18 +13,17 @@ use quickcheck::{Arbitrary, Gen};
 #[derive(Debug, Clone)]
 pub struct GCounter {
     replica_id: ReplicaId,
-    counts: HashMap<ReplicaId, u64>
+    counts: HashMap<ReplicaId, u64>,
 }
 
 /// An increment operation over `GCounter` CRDTs.
 #[derive(Debug, Clone, Copy)]
 pub struct GCounterOp {
     replica_id: ReplicaId,
-    count: u64
+    count: u64,
 }
 
 impl GCounter {
-
     /// Create a new grow-only counter with the provided replica id and an
     /// initial count of 0.
     ///
@@ -39,8 +38,13 @@ impl GCounter {
     /// assert_eq!(0, counter.count());
     /// ```
     pub fn new<R>(replica_id: R) -> GCounter
-    where R: Into<ReplicaId> {
-        GCounter { replica_id: replica_id.into(), counts: HashMap::new() }
+    where
+        R: Into<ReplicaId>,
+    {
+        GCounter {
+            replica_id: replica_id.into(),
+            counts: HashMap::new(),
+        }
     }
 
     /// Get the current count of the counter.
@@ -90,7 +94,10 @@ impl GCounter {
     pub fn increment(&mut self, amount: u64) -> GCounterOp {
         let count = self.counts.entry(self.replica_id).or_insert(0);
         *count += amount;
-        GCounterOp { replica_id: self.replica_id, count: *count }
+        GCounterOp {
+            replica_id: self.replica_id,
+            count: *count,
+        }
     }
 
     /// Get the replica ID of this counter.
@@ -100,7 +107,6 @@ impl GCounter {
 }
 
 impl Crdt for GCounter {
-
     type Operation = GCounterOp;
 
     /// Merge a replica into this counter.
@@ -149,7 +155,10 @@ impl Crdt for GCounter {
     /// assert_eq!(13, local.count());
     /// ```
     fn apply(&mut self, op: GCounterOp) {
-        let GCounterOp { replica_id, count: other_count } = op;
+        let GCounterOp {
+            replica_id,
+            count: other_count,
+        } = op;
         let count = self.counts.entry(replica_id).or_insert(0);
         *count = cmp::max(*count, other_count);
     }
@@ -165,7 +174,6 @@ impl Eq for GCounter {}
 
 impl PartialOrd for GCounter {
     fn partial_cmp(&self, other: &GCounter) -> Option<Ordering> {
-
         /// Compares `a` to `b` based on replica counts.
         ///
         /// Precondition: `a.counts.len() <= b.counts.len()`
@@ -174,48 +182,69 @@ impl PartialOrd for GCounter {
                 match b.counts.get(replica_id) {
                     Some(b_count) if a_count > b_count => return true,
                     None => return true,
-                    _ => ()
+                    _ => (),
                 }
             }
             false
         }
 
-        let (self_gt_other, other_gt_self) =
-            match self.counts.len().cmp(&other.counts.len()) {
-                Less    => (a_gt_b(self, other), true),
-                Greater => (true, a_gt_b(other, self)),
-                Equal   => (a_gt_b(self, other), a_gt_b(other, self))
-            };
+        let (self_gt_other, other_gt_self) = match self.counts.len().cmp(&other.counts.len()) {
+            Less => (a_gt_b(self, other), true),
+            Greater => (true, a_gt_b(other, self)),
+            Equal => (a_gt_b(self, other), a_gt_b(other, self)),
+        };
 
         match (self_gt_other, other_gt_self) {
-            (true, true)   => None,
-            (true, false)  => Some(Greater),
-            (false, true)  => Some(Less),
-            (false, false) => Some(Equal)
+            (true, true) => None,
+            (true, false) => Some(Greater),
+            (false, true) => Some(Less),
+            (false, false) => Some(Equal),
         }
     }
 }
 
 #[cfg(any(quickcheck, test))]
 impl Arbitrary for GCounter {
-    fn arbitrary<G>(g: &mut G) -> GCounter where G: Gen {
+    fn arbitrary<G>(g: &mut G) -> GCounter
+    where
+        G: Gen,
+    {
         use gen_replica_id;
-        GCounter { replica_id: gen_replica_id(), counts: Arbitrary::arbitrary(g) }
+        GCounter {
+            replica_id: gen_replica_id(),
+            counts: Arbitrary::arbitrary(g),
+        }
     }
-    fn shrink(&self) -> Box<Iterator<Item=GCounter> + 'static> {
+    fn shrink(&self) -> Box<Iterator<Item = GCounter> + 'static> {
         let replica_id: ReplicaId = self.replica_id();
-        Box::new(self.counts.shrink().map(move |counts| GCounter { replica_id: replica_id, counts: counts }))
+        Box::new(self.counts.shrink().map(move |counts| {
+            GCounter {
+                replica_id: replica_id,
+                counts: counts,
+            }
+        }))
     }
 }
 
 #[cfg(any(quickcheck, test))]
 impl Arbitrary for GCounterOp {
-    fn arbitrary<G>(g: &mut G) -> GCounterOp where G: Gen {
-        GCounterOp { replica_id: Arbitrary::arbitrary(g), count: Arbitrary::arbitrary(g) }
+    fn arbitrary<G>(g: &mut G) -> GCounterOp
+    where
+        G: Gen,
+    {
+        GCounterOp {
+            replica_id: Arbitrary::arbitrary(g),
+            count: Arbitrary::arbitrary(g),
+        }
     }
-    fn shrink(&self) -> Box<Iterator<Item=GCounterOp> + 'static> {
+    fn shrink(&self) -> Box<Iterator<Item = GCounterOp> + 'static> {
         let replica_id = self.replica_id;
-        Box::new(self.count.shrink().map(move |count| GCounterOp { replica_id: replica_id, count: count }))
+        Box::new(self.count.shrink().map(move |count| {
+            GCounterOp {
+                replica_id: replica_id,
+                count: count,
+            }
+        }))
     }
 }
 
@@ -224,7 +253,7 @@ mod test {
 
     use quickcheck::quickcheck;
 
-    use {Crdt, ReplicaId, test};
+    use {test, Crdt, ReplicaId};
     use counter::{GCounter, GCounterOp};
 
     type C = GCounter;
@@ -250,28 +279,38 @@ mod test {
         quickcheck(test::ordering_equality::<C> as fn(C, C) -> bool);
     }
 
-    #[quickcheck]
-    fn check_local_increment(increments: Vec<u32>) -> bool {
-        let mut counter = GCounter::new(ReplicaId(0));
-        for &amount in increments.iter() {
-            counter.increment(amount as u64);
+    #[test]
+    fn test_local_increments() {
+        fn check_local_increment(increments: Vec<u32>) -> bool {
+            let mut counter = GCounter::new(ReplicaId(0));
+            for &amount in increments.iter() {
+                counter.increment(amount as u64);
+            }
+            increments.into_iter().fold(0, |a, b| a + b) as u64 == counter.count()
         }
-        increments.into_iter().fold(0, |a, b| a + b) as u64 == counter.count()
+        quickcheck(check_local_increment as fn(Vec<u32>) -> bool);
     }
 
-    #[quickcheck]
-    fn check_ordering_lt(mut a: GCounter, b: GCounter) -> bool {
-        a.merge(b.clone());
-        a.increment(1);
-        a > b && b < a
+    #[test]
+    fn test_ordering_lt() {
+        fn check_ordering_lt(mut a: GCounter, b: GCounter) -> bool {
+            a.merge(b.clone());
+            a.increment(1);
+            a > b && b < a
+        }
+        quickcheck(check_ordering_lt as fn(GCounter, GCounter) -> bool);
     }
 
-    #[quickcheck]
-    fn check_ordering_none(mut a: GCounter, mut b: GCounter) -> bool {
-        a.merge(b.clone());
-        b.merge(a.clone());
-        a.increment(1);
-        b.increment(1);
-        a.partial_cmp(&b) == None && b.partial_cmp(&a) == None
+
+    #[test]
+    fn test_ordering_none() {
+        fn check_ordering_none(mut a: GCounter, mut b: GCounter) -> bool {
+            a.merge(b.clone());
+            b.merge(a.clone());
+            a.increment(1);
+            b.increment(1);
+            a.partial_cmp(&b) == None && b.partial_cmp(&a) == None
+        }
+        quickcheck(check_ordering_none as fn(GCounter, GCounter) -> bool);
     }
 }

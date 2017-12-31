@@ -1,7 +1,7 @@
-use std::cmp::Ordering::{self, Greater, Less, Equal};
+use std::cmp::Ordering::{self, Equal, Greater, Less};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry::{Occupied, Vacant};
-use std::fmt::{Debug, Formatter, Error};
+use std::fmt::{Debug, Error, Formatter};
 use std::hash::Hash;
 
 #[cfg(any(quickcheck, test))]
@@ -11,8 +11,11 @@ use Crdt;
 
 /// A last-writer wins set.
 #[derive(Clone, Default, Eq)]
-pub struct LwwSet<T> where T: Eq + Hash {
-    elements: HashMap<T, (bool, u64)>
+pub struct LwwSet<T>
+where
+    T: Eq + Hash,
+{
+    elements: HashMap<T, (bool, u64)>,
 }
 
 /// An insert or remove operation over `LwwSet` CRDTs.
@@ -22,8 +25,10 @@ pub enum LwwSetOp<T> {
     Remove(T, u64),
 }
 
-impl <T> LwwSet<T> where T: Clone + Eq + Hash {
-
+impl<T> LwwSet<T>
+where
+    T: Clone + Eq + Hash,
+{
     /// Create a new last-writer wins set.
     ///
     /// ### Example
@@ -35,7 +40,9 @@ impl <T> LwwSet<T> where T: Clone + Eq + Hash {
     /// assert!(set.is_empty());
     /// ```
     pub fn new() -> LwwSet<T> {
-        LwwSet { elements: HashMap::new() }
+        LwwSet {
+            elements: HashMap::new(),
+        }
     }
 
     /// Insert an element into a two-phase set.
@@ -54,11 +61,11 @@ impl <T> LwwSet<T> where T: Clone + Eq + Hash {
             Occupied(ref mut entry) if transaction_id >= entry.get().1 => {
                 entry.insert((true, transaction_id));
                 Some(LwwSetOp::Insert(element, transaction_id))
-            },
+            }
             Vacant(entry) => {
                 entry.insert((true, transaction_id));
                 Some(LwwSetOp::Insert(element, transaction_id))
-            },
+            }
             _ => None,
         }
     }
@@ -77,16 +84,15 @@ impl <T> LwwSet<T> where T: Clone + Eq + Hash {
     /// assert!(!set.contains(&"first-element"));
     /// ```
     pub fn remove(&mut self, element: T, transaction_id: u64) -> Option<LwwSetOp<T>> {
-
         let updated = match self.elements.entry(element.clone()) {
             Occupied(ref mut entry) if transaction_id > entry.get().1 => {
                 entry.insert((false, transaction_id));
                 true
-            },
+            }
             Vacant(entry) => {
                 entry.insert((false, transaction_id));
                 true
-            },
+            }
             _ => false,
         };
 
@@ -99,32 +105,42 @@ impl <T> LwwSet<T> where T: Clone + Eq + Hash {
 
     /// Returns the number of elements in the set.
     pub fn len(&self) -> usize {
-        self.elements.iter().filter(|&(_, &(is_present, _))| is_present).count()
+        self.elements
+            .iter()
+            .filter(|&(_, &(is_present, _))| is_present)
+            .count()
     }
 
     /// Returns true if the set contains the value.
     pub fn contains(&self, value: &T) -> bool {
-        self.elements.get(value).map(|&(is_present, _)| is_present).unwrap_or(false)
+        self.elements
+            .get(value)
+            .map(|&(is_present, _)| is_present)
+            .unwrap_or(false)
     }
 
     /// Returns true if the set contains no elements.
-    pub fn is_empty(&self) -> bool { self.len() == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     pub fn is_subset(&self, other: &LwwSet<T>) -> bool {
-        self.elements
-            .iter()
-            .all(|(element, &(is_present, _))| !is_present || other.contains(element))
+        self.elements.iter().all(|(element, &(is_present, _))| {
+            !is_present || other.contains(element)
+        })
     }
 
     pub fn is_disjoint(&self, other: &LwwSet<T>) -> bool {
-        self.elements
-            .iter()
-            .all(|(element, &(is_present, _))| !is_present || !other.contains(element))
+        self.elements.iter().all(|(element, &(is_present, _))| {
+            !is_present || !other.contains(element)
+        })
     }
 }
 
-impl <T> Crdt for LwwSet<T> where T: Clone + Eq + Hash {
-
+impl<T> Crdt for LwwSet<T>
+where
+    T: Clone + Eq + Hash,
+{
     type Operation = LwwSetOp<T>;
 
     /// Merge a replica into the set.
@@ -181,40 +197,42 @@ impl <T> Crdt for LwwSet<T> where T: Clone + Eq + Hash {
     /// ```
     fn apply(&mut self, op: LwwSetOp<T>) {
         match op {
-            LwwSetOp::Insert(element, tid) => { self.insert(element, tid); },
-            LwwSetOp::Remove(element, tid) => { self.remove(element, tid); }
+            LwwSetOp::Insert(element, tid) => {
+                self.insert(element, tid);
+            }
+            LwwSetOp::Remove(element, tid) => {
+                self.remove(element, tid);
+            }
         }
     }
 }
 
-impl <T : Eq + Hash> PartialEq for LwwSet<T> {
+impl<T: Eq + Hash> PartialEq for LwwSet<T> {
     fn eq(&self, other: &LwwSet<T>) -> bool {
         self.elements == other.elements
     }
 }
 
-impl <T> PartialOrd for LwwSet<T> where T: Eq + Hash {
+impl<T> PartialOrd for LwwSet<T>
+where
+    T: Eq + Hash,
+{
     fn partial_cmp(&self, other: &LwwSet<T>) -> Option<Ordering> {
         if self.elements == other.elements {
             return Some(Equal);
         }
-        let self_is_greater =
-            self.elements
-                .iter()
-                .any(|(element, &(_, self_tid))| {
-                    other.elements.get(element).map_or(true, |&(_, other_tid)| {
-                        self_tid > other_tid
-                    })
-                });
+        let self_is_greater = self.elements.iter().any(|(element, &(_, self_tid))| {
+            other
+                .elements
+                .get(element)
+                .map_or(true, |&(_, other_tid)| self_tid > other_tid)
+        });
 
-        let other_is_greater =
-            other.elements
-                .iter()
-                .any(|(element, &(_, other_tid))| {
-                        self.elements.get(element).map_or(true, |&(_, self_tid)| {
-                        other_tid > self_tid
-                    })
-                });
+        let other_is_greater = other.elements.iter().any(|(element, &(_, other_tid))| {
+            self.elements
+                .get(element)
+                .map_or(true, |&(_, self_tid)| other_tid > self_tid)
+        });
 
         if self_is_greater && other_is_greater {
             None
@@ -226,42 +244,53 @@ impl <T> PartialOrd for LwwSet<T> where T: Eq + Hash {
     }
 }
 
-impl <T> Debug for LwwSet<T> where T: Debug + Eq + Hash {
-     fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
-         try!(write!(f, "{{present: {{"));
-         for (i, x) in self.elements
-                           .iter()
-                           .filter(|&(_, &(is_present, _))| is_present)
-                           .map(|(e, &(_, tid))| (e, tid))
-                           .enumerate() {
-             if i != 0 { try!(write!(f, ", ")); }
-             try!(write!(f, "{:?}", x))
-         }
-         try!(write!(f, "}}, removed: {{"));
-         for (i, x) in self.elements
-                           .iter()
-                           .filter(|&(_, &(is_present, _))| !is_present)
-                           .map(|(e, &(_, tid))| (e, tid))
-                           .enumerate() {
-             if i != 0 { try!(write!(f, ", ")); }
-             try!(write!(f, "{:?}", x))
-         }
-         write!(f, "}}}}")
-     }
+impl<T> Debug for LwwSet<T>
+where
+    T: Debug + Eq + Hash,
+{
+    fn fmt(&self, f: &mut Formatter) -> Result<(), Error> {
+        try!(write!(f, "{{present: {{"));
+        for (i, x) in self.elements
+            .iter()
+            .filter(|&(_, &(is_present, _))| is_present)
+            .map(|(e, &(_, tid))| (e, tid))
+            .enumerate()
+        {
+            if i != 0 {
+                try!(write!(f, ", "));
+            }
+            try!(write!(f, "{:?}", x))
+        }
+        try!(write!(f, "}}, removed: {{"));
+        for (i, x) in self.elements
+            .iter()
+            .filter(|&(_, &(is_present, _))| !is_present)
+            .map(|(e, &(_, tid))| (e, tid))
+            .enumerate()
+        {
+            if i != 0 {
+                try!(write!(f, ", "));
+            }
+            try!(write!(f, "{:?}", x))
+        }
+        write!(f, "}}}}")
+    }
 }
 
 #[cfg(any(quickcheck, test))]
-impl <T : Arbitrary + Eq + Hash + Clone> Arbitrary for LwwSet<T> {
+impl<T: Arbitrary + Eq + Hash + Clone> Arbitrary for LwwSet<T> {
     fn arbitrary<G: Gen>(g: &mut G) -> LwwSet<T> {
-        LwwSet { elements: Arbitrary::arbitrary(g) }
+        LwwSet {
+            elements: Arbitrary::arbitrary(g),
+        }
     }
-    fn shrink(&self) -> Box<Iterator<Item=LwwSet<T>> + 'static> {
+    fn shrink(&self) -> Box<Iterator<Item = LwwSet<T>> + 'static> {
         Box::new(self.elements.shrink().map(|es| LwwSet { elements: es }))
     }
 }
 
 #[cfg(any(quickcheck, test))]
-impl <T : Arbitrary> Arbitrary for LwwSetOp<T> {
+impl<T: Arbitrary> Arbitrary for LwwSetOp<T> {
     fn arbitrary<G: Gen>(g: &mut G) -> LwwSetOp<T> {
         if Arbitrary::arbitrary(g) {
             LwwSetOp::Insert(Arbitrary::arbitrary(g), Arbitrary::arbitrary(g))
@@ -269,7 +298,7 @@ impl <T : Arbitrary> Arbitrary for LwwSetOp<T> {
             LwwSetOp::Insert(Arbitrary::arbitrary(g), Arbitrary::arbitrary(g))
         }
     }
-    fn shrink(&self) -> Box<Iterator<Item=LwwSetOp<T>> + 'static> {
+    fn shrink(&self) -> Box<Iterator<Item = LwwSetOp<T>> + 'static> {
         match self.clone() {
             LwwSetOp::Insert(element, tid) => {
                 Box::new((element, tid).shrink().map(|(e, t)| LwwSetOp::Insert(e, t)))
@@ -314,20 +343,26 @@ mod test {
         quickcheck(test::ordering_equality::<C> as fn(C, C) -> bool);
     }
 
-    #[quickcheck]
-    fn check_local_insert(elements: Vec<u8>) -> bool {
-        let mut set = LwwSet::new();
-        for element in elements.clone().into_iter() {
-            set.insert(element, 0);
-        }
+    #[test]
+    fn test_local_insert() {
+        fn check_local_insert(elements: Vec<u8>) -> bool {
+            let mut set = LwwSet::new();
+            for element in elements.clone().into_iter() {
+                set.insert(element, 0);
+            }
 
-        elements.iter().all(|element| set.contains(element))
+            elements.iter().all(|element| set.contains(element))
+        }
+        quickcheck(check_local_insert as fn(Vec<u8>) -> bool);
     }
 
-    #[quickcheck]
-    fn check_ordering_lt(mut a: LwwSet<u8>, b: LwwSet<u8>) -> bool {
-        a.merge(b.clone());
-        a.insert(0, u64::MAX);
-        a > b && b < a
+    #[test]
+    fn test_ordering_lt() {
+        fn check_ordering_lt(mut a: LwwSet<u8>, b: LwwSet<u8>) -> bool {
+            a.merge(b.clone());
+            a.insert(0, u64::MAX);
+            a > b && b < a
+        }
+        quickcheck(check_ordering_lt as fn(LwwSet<u8>, LwwSet<u8>) -> bool);
     }
 }

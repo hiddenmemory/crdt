@@ -1,4 +1,4 @@
-use std::cmp::Ordering::{self, Greater, Less, Equal};
+use std::cmp::Ordering::{self, Equal, Greater, Less};
 use std::collections::HashMap;
 
 use {Crdt, ReplicaId};
@@ -22,7 +22,6 @@ pub struct PnCounterOp {
 }
 
 impl PnCounter {
-
     /// Create a new counter with the provided replica id and an initial count
     /// of 0.
     ///
@@ -37,8 +36,13 @@ impl PnCounter {
     /// assert_eq!(0, counter.count());
     /// ```
     pub fn new<R>(replica_id: R) -> PnCounter
-    where R: Into<ReplicaId> {
-        PnCounter { replica_id: replica_id.into(), counts: HashMap::new() }
+    where
+        R: Into<ReplicaId>,
+    {
+        PnCounter {
+            replica_id: replica_id.into(),
+            counts: HashMap::new(),
+        }
     }
 
     /// Get the current count of the counter.
@@ -93,7 +97,10 @@ impl PnCounter {
     pub fn increment(&mut self, amount: i64) -> PnCounterOp {
         let pn = self.counts.entry(self.replica_id).or_insert(Pn::new());
         pn.increment(amount);
-        PnCounterOp { replica_id: self.replica_id, pn: pn.clone() }
+        PnCounterOp {
+            replica_id: self.replica_id,
+            pn: pn.clone(),
+        }
     }
 
     /// Get the replica ID of this counter.
@@ -103,7 +110,6 @@ impl PnCounter {
 }
 
 impl Crdt for PnCounter {
-
     type Operation = PnCounterOp;
 
     /// Merge a replica into this counter.
@@ -164,55 +170,75 @@ impl PartialEq for PnCounter {
 
 impl PartialOrd for PnCounter {
     fn partial_cmp(&self, other: &PnCounter) -> Option<Ordering> {
-
         /// Compares `a` to `b` based on replica counts.
         ///
         /// Precondition: `a.counts.len() <= b.counts.len()`
         fn a_gt_b(a: &PnCounter, b: &PnCounter) -> bool {
-            a.counts.iter().any(|(replica_id, a_pn)| {
-                match b.counts.get(replica_id) {
+            a.counts
+                .iter()
+                .any(|(replica_id, a_pn)| match b.counts.get(replica_id) {
                     Some(b_pn) => a_pn.p > b_pn.p || a_pn.n > b_pn.n,
                     None => true,
-                }
-            })
+                })
         }
 
-        let (self_gt_other, other_gt_self) =
-            match self.counts.len().cmp(&other.counts.len()) {
-                Less    => (a_gt_b(self, other), true),
-                Greater => (true, a_gt_b(other, self)),
-                Equal   => (a_gt_b(self, other), a_gt_b(other, self))
-            };
+        let (self_gt_other, other_gt_self) = match self.counts.len().cmp(&other.counts.len()) {
+            Less => (a_gt_b(self, other), true),
+            Greater => (true, a_gt_b(other, self)),
+            Equal => (a_gt_b(self, other), a_gt_b(other, self)),
+        };
 
         match (self_gt_other, other_gt_self) {
-            (true, true)   => None,
-            (true, false)  => Some(Greater),
-            (false, true)  => Some(Less),
-            (false, false) => Some(Equal)
+            (true, true) => None,
+            (true, false) => Some(Greater),
+            (false, true) => Some(Less),
+            (false, false) => Some(Equal),
         }
     }
 }
 
 #[cfg(any(quickcheck, test))]
 impl Arbitrary for PnCounter {
-    fn arbitrary<G>(g: &mut G) -> PnCounter where G: Gen {
+    fn arbitrary<G>(g: &mut G) -> PnCounter
+    where
+        G: Gen,
+    {
         use gen_replica_id;
-        PnCounter { replica_id: gen_replica_id(), counts: Arbitrary::arbitrary(g) }
+        PnCounter {
+            replica_id: gen_replica_id(),
+            counts: Arbitrary::arbitrary(g),
+        }
     }
-    fn shrink(&self) -> Box<Iterator<Item=PnCounter> + 'static> {
+    fn shrink(&self) -> Box<Iterator<Item = PnCounter> + 'static> {
         let replica_id = self.replica_id();
-        Box::new(self.counts.shrink().map(move |counts| PnCounter { replica_id: replica_id, counts: counts }))
+        Box::new(self.counts.shrink().map(move |counts| {
+            PnCounter {
+                replica_id: replica_id,
+                counts: counts,
+            }
+        }))
     }
 }
 
 #[cfg(any(quickcheck, test))]
 impl Arbitrary for PnCounterOp {
-    fn arbitrary<G>(g: &mut G) -> PnCounterOp where G: Gen {
-        PnCounterOp { replica_id: Arbitrary::arbitrary(g), pn: Arbitrary::arbitrary(g) }
+    fn arbitrary<G>(g: &mut G) -> PnCounterOp
+    where
+        G: Gen,
+    {
+        PnCounterOp {
+            replica_id: Arbitrary::arbitrary(g),
+            pn: Arbitrary::arbitrary(g),
+        }
     }
-    fn shrink(&self) -> Box<Iterator<Item=PnCounterOp> + 'static> {
+    fn shrink(&self) -> Box<Iterator<Item = PnCounterOp> + 'static> {
         let replica_id = self.replica_id;
-        Box::new(self.pn.shrink().map(move |pn| PnCounterOp { replica_id: replica_id, pn: pn }))
+        Box::new(self.pn.shrink().map(move |pn| {
+            PnCounterOp {
+                replica_id: replica_id,
+                pn: pn,
+            }
+        }))
     }
 }
 
@@ -221,7 +247,7 @@ mod test {
 
     use quickcheck::quickcheck;
 
-    use {Crdt, ReplicaId, test};
+    use {test, Crdt, ReplicaId};
     use super::{PnCounter, PnCounterOp};
 
     type C = PnCounter;
@@ -247,27 +273,35 @@ mod test {
         quickcheck(test::ordering_equality::<C> as fn(C, C) -> bool);
     }
 
-    #[quickcheck]
-    fn check_local_increment(increments: Vec<i32>) -> bool {
-        let mut counter = PnCounter::new(ReplicaId(0));
-        for &amount in increments.iter() {
-            counter.increment(amount as i64);
+    #[test]
+    fn test_local_increment() {
+        fn check_local_increment(increments: Vec<i32>) -> bool {
+            let mut counter = PnCounter::new(ReplicaId(0));
+            for &amount in increments.iter() {
+                counter.increment(amount as i64);
+            }
+            increments.into_iter().fold(0, |a, b| a + b) as i64 == counter.count()
         }
-        increments.into_iter().fold(0, |a, b| a + b) as i64 == counter.count()
+        quickcheck(check_local_increment as fn(Vec<i32>) -> bool);
     }
 
-    #[quickcheck]
-    fn check_ordering_lt(mut a: PnCounter, b: PnCounter) -> bool {
-        a.merge(b.clone());
-        a.increment(-1);
-        a > b && b < a
+    #[test]
+    fn test_ordering_lt() {
+        fn check_ordering_lt(mut a: PnCounter, b: PnCounter) -> bool {
+            a.merge(b.clone());
+            a.increment(-1);
+            a > b && b < a
+        }
+        quickcheck(check_ordering_lt as fn(PnCounter, PnCounter) -> bool);
     }
 
-
-    #[quickcheck]
-    fn check_ordering_none(mut a: PnCounter, mut b: PnCounter) -> bool {
-        a.increment(1);
-        b.increment(-1);
-        a.partial_cmp(&b) == None && b.partial_cmp(&a) == None
+    #[test]
+    fn test_ordering_none() {
+        fn check_ordering_none(mut a: PnCounter, mut b: PnCounter) -> bool {
+            a.increment(1);
+            b.increment(-1);
+            a.partial_cmp(&b) == None && b.partial_cmp(&a) == None
+        }
+        quickcheck(check_ordering_none as fn(PnCounter, PnCounter) -> bool);
     }
 }
